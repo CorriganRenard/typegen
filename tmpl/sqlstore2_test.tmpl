@@ -1,0 +1,144 @@
+package sqlstore
+
+import (
+	"bootstraphost/ty"
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/gocraft/dbr/v2"
+)
+
+func Test{{.StructName}}CRUD(t *testing.T) {
+
+	f := func(t *testing.T, ctx context.Context, store *SQLStore) {
+		o := ty.{{.StructName}}{}
+		err := store.{{.StructName}}().Insert(ctx, &o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := o.{{.PrimaryKeyField.FieldName}}
+
+		t.Logf("ID: %v", id)
+
+		o2, err := store.{{.StructName}}().SelectByID(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if o.{{.PrimaryKeyField.FieldName}} != o2.{{.PrimaryKeyField.FieldName}} {
+			t.Errorf("mismatched IDs, expected: %v, actual: %v", o.{{.PrimaryKeyField.FieldName}}, o2.{{.PrimaryKeyField.FieldName}})
+		}
+
+		err = store.Project().Update(ctx, o2)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = store.Project().Delete(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = store.Project().SelectByID(ctx, id)
+		if !(err != nil && errors.Is(err, dbr.ErrNotFound)) {
+			t.Errorf("unexpected select result after delete: %v", err)
+		}
+	}
+
+	t.Run("notx", func(t *testing.T) {
+		store := newTestStore(t)
+		ctx := context.Background()
+		f(t, ctx, store)
+	})
+
+	t.Run("tx", func(t *testing.T) {
+		store := newTestStore(t)
+		store.RunTxx(context.Background(), func(ctx context.Context) error {
+			f(t, ctx, store)
+			return nil
+		})
+	})
+
+}
+func Test{{.StructName}}Select(t *testing.T) {
+
+	store := newTestStore(t)
+	ctx := context.Background()
+	var err error
+	var result {{.StructName}}List
+
+	var records [5]ty.{{.StructName}}
+	for i := range records {
+		records[i] = ty.{{.StructName}}{}
+		err := store.{{.StructName}}().Insert(ctx, &records[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	count, err := store.{{.StructName}}().Count(ctx, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int(count) != len(records) {
+		t.Errorf("unexpected Count(): %d", count)
+	}
+
+	result = nil
+	err = store.{{.StructName}}().Select(ctx, 0, 2, nil, []interface{}{"{{.PrimaryKeyField.NameUnderscore}}"}, &result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 2 {
+		t.Errorf("unexpected result length %d", len(result))
+	}
+
+	result = nil
+	err = store.{{.StructName}}().Select(ctx, 0, 0, nil, []interface{}{"{{.PrimaryKeyField.NameUnderscore}}"}, &result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 5 {
+		t.Errorf("unexpected result length %d", len(result))
+	}
+}
+func Test{{.StructName}}SelectCursor(t *testing.T) {
+
+	store := newTestStore(t)
+	ctx := context.Background()
+	var err error
+	var result {{.StructName}}List
+
+	var records [5]ty.{{.StructName}}
+	for i := range records {
+		records[i] = ty.{{.StructName}}{}
+		err := store.{{.StructName}}().Insert(ctx, &records[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cursor := ""
+	result = nil
+	loopCount := 0
+	for i := 0; i < 10; i++ {
+		var nextRes {{.StructName}}List
+		cursor, err = store.{{.StructName}}().SelectCursor(ctx, 2, cursor, nil, []interface{}{"{{.PrimaryKeyField.NameUnderscore}}"}, &nextRes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		//t.Logf("cursor: %q", cursor)
+		result = append(result, nextRes...)
+		if len(nextRes) == 0 {
+			break
+		}
+		loopCount++
+	}
+
+	if len(result) != 5 {
+		t.Errorf("unexpected result length %d", len(result))
+	}
+	if loopCount != 3 {
+		t.Errorf("unexpected loopCount %d", loopCount)
+	}
+}

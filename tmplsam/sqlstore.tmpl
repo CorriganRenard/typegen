@@ -1,0 +1,198 @@
+package sqlstore
+
+import (
+	"github.com/bradleypeabody/gouuidv6"
+	"github.com/gocaveman/tmeta/tmetautil"
+)
+
+// sql name for this table
+const {{.oNameLCamel}}TableName = "{{.oNameUnderscore}}"
+
+// {{.oName}} has the methods related to {{.oNameLCamel}}s.
+type {{.oName}}Store struct {
+	sqlStore *SQLStore
+}
+
+// {{.oName}} returns a {{.oName}}Store.
+func (s *SQLStore) {{.oName}}() *{{.oName}}Store {
+	return &{{.oName}}Store{sqlStore: s}
+}
+
+// Insert will insert a new {{.oName}}, assigning an ID if needed.
+func (s *{{.oName}}Store) Insert(ctx ctx, {{.oNameLCamel}} *ty.{{.oName}}) error {
+
+	tx, err := s.sqlStore.DBStore.Session().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.RollbackUnlessCommitted()
+
+	if {{.oNameLCamel}}.{{.oName}}ID.IsNil() {
+		{{.oNameLCamel}}.{{.oName}}ID = gouuidv6.NewB64()
+	}
+
+	// validate object for anything that should be enforced at database level
+	if err := checkValidCond({{.oNameLCamel}}); err != nil {
+		return err
+	}
+
+	_, err = tx.InsertInto({{.oNameLCamel}}TableName).
+		Columns(tfields({{.oNameLCamel}})...).
+		Record({{.oNameLCamel}}).
+		Exec()
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// Update will updates all fields on a {{.oNameLCamel}}.
+func (s *{{.oName}}Store) Update(ctx ctx, {{.oNameLCamel}} *ty.{{.oName}}) error {
+
+	tx, err := s.sqlStore.DBStore.Session().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.RollbackUnlessCommitted()
+
+	// validate object for anything that should be enforced at database level
+	if err := checkValidCond({{.oNameLCamel}}); err != nil {
+		return err
+	}
+
+	_, err = tUpdateSet(tx, {{.oNameLCamel}}TableName, {{.oNameLCamel}}).
+		Where("{{.oNameUnderscore}}_id = ?", {{.oNameLCamel}}.{{.oName}}ID).
+		Exec()
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// DeleteByID will delete the indicated {{.oNameLCamel}}.
+func (s *{{.oName}}Store) DeleteByID(ctx ctx, {{.oNameLCamel}}ID ID) error {
+
+	tx, err := s.sqlStore.DBStore.Session().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.RollbackUnlessCommitted()
+
+	_, err = tx.DeleteFrom({{.oNameLCamel}}TableName).
+		Where("{{.oNameUnderscore}}_id = ?", {{.oNameLCamel}}ID).
+		Exec()
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// SelectByID returns a {{.oNameLCamel}} for the specified ID or sql.ErrNotFound if not present.
+func (s *{{.oName}}Store) SelectByID(ctx ctx, {{.oNameLCamel}}ID ID) (*ty.{{.oName}}, error) {
+
+	tx, err := s.sqlStore.DBStore.Session().BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.RollbackUnlessCommitted()
+
+	var ret ty.{{.oName}}
+	err = tx.Select(tfields(&ret)...).
+		From({{.oNameLCamel}}TableName).
+		Where("{{.oNameUnderscore}}_id = ?", {{.oNameLCamel}}ID).
+		LoadOne(&ret)
+	if err != nil {
+		return &ret, err
+	}
+
+	return &ret, tx.Commit()
+}
+
+// SelectByIDLike will select all records with a like match on the primary key.
+// If cb is non-nil then it is called for each resulting record until either the result set is complete or
+// cb returns an error, and ret is always nil.  If cb is nil then the results will be returned in ret.
+//
+// NOTE: This is not particularly useful but it's a good example to start from when writing methods that can return
+// or stream multiple records.
+func (s *{{.oName}}Store) SelectByIDLike(ctx ctx, idLike string, cb func(ty.{{.oName}}) error) (ret []ty.{{.oName}}, err error) {
+
+	tx, err := s.sqlStore.DBStore.Session().BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.RollbackUnlessCommitted()
+
+	stmt := tx.Select(tfields(&ret)...).
+		From({{.oNameLCamel}}TableName).
+		Where("id LIKE ?", idLike)
+
+	if cb != nil {
+		var o {{.oName}}
+		err = selectIterate(stmt, &o, func() error { return cb(o) })
+	} else {
+		_, err = stmt.Load(&ret)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, tx.Commit()
+}
+
+// Select performs a more generic select with paging support.
+// If cb is non-nil then it is called for each resulting record until either the result set is complete or
+// cb returns an error, and ret is always nil.  If cb is nil then the results will be returned in ret.
+func (s *{{.oName}}Store) Select(ctx ctx, criteria tmetautil.Criteria, orderBy tmetautil.OrderByList, limit, offset int64, cb func(ty.{{.oName}}) error) (ret []ty.{{.oName}}, err error) {
+
+	tx, err := s.sqlStore.DBStore.Session().BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.RollbackUnlessCommitted()
+
+	fieldNames := tfields(ty.{{.oName}}{})
+
+	err = criteria.CheckFieldNames(fieldNames...) // verify field names are valid, prevent sql injection
+	if err != nil {
+		return nil, err
+	}
+	err = orderBy.CheckFieldNames(fieldNames...) // verify field names are valid, prevent sql injection
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := tx.Select(fieldNames...).From({{.oNameLCamel}}TableName)
+
+        if len(criteria) > 0{
+	        whereSql, args, err := criteria.SQL()
+	        if err != nil {
+		        return nil, err
+	        }
+	        stmt = stmt.Where(whereSql, args...)
+        }
+	for _, o := range orderBy {
+		stmt = stmt.OrderDir(o.Field, !o.Desc)
+	}
+
+	if offset > 0 {
+		stmt = stmt.Offset(uint64(offset))
+	}
+	if limit > 0 {
+		stmt = stmt.Limit(uint64(limit))
+	}
+
+	if cb != nil {
+		var o ty.{{.oName}}
+		err = selectIterate(stmt, &o, func() error { return cb(o) })
+	} else {
+		_, err = stmt.Load(&ret)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, tx.Commit()
+}

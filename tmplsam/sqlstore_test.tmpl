@@ -1,0 +1,46 @@
+package sqlstore
+
+import (
+	"context"
+	"samurai"
+	"testing"
+
+	"github.com/gocaveman/tmeta/tmetautil"
+
+	"github.com/gocraft/dbr/v2"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func Test{{.oName}}Store(t *testing.T) {
+
+	ctx := context.Background()
+
+	dbTestEnv := samurai.NewDBTestEnv()
+	sqlStore := NewSQLStore(dbTestEnv.DBStore)
+
+	// helper to make new records - use it below if it's convenient
+	newRec := func() *{{.oName}} {
+		return &{{.oName}}{
+			// TODO: fill out fields
+			// Name: fmt.Sprintf("Name %d", rand.Uint64()),
+		}
+	}
+
+	t.Run("CRUD", func(t *testing.T) {
+		assert := assert.New(t)
+		o := newRec()
+		assert.NoError(sqlStore.{{.oName}}().Insert(ctx, o))
+		assert.NotEmpty(o.{{.oName}}ID)
+		o2, err := sqlStore.{{.oName}}().SelectByID(ctx, o.{{.oName}}ID)
+		assert.NoError(err)
+		assert.NotNil(o2)
+		// assert.Equal(o.Name, o2.Name)
+		// o2.Name = "New Name"
+		assert.NoError(sqlStore.{{.oName}}().Update(ctx, o2))
+		assert.NoError(sqlStore.{{.oName}}().DeleteByID(ctx, o.{{.oName}}ID))
+		_, err = sqlStore.{{.oName}}().SelectByID(ctx, o.{{.oName}}ID)
+		assert.Equal(dbr.ErrNotFound, err)
+	})
+
+}

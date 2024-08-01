@@ -1,0 +1,484 @@
+package sqlstore
+
+import (
+	"bootstraphost/ty"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+)
+
+// {{.StructName}}Store has db storage methods for this type.
+type {{.StructName}}Store struct {
+	*SQLStore // embed store for easy access
+}
+
+// {{.StructName}} returns a {{.StructName}}Store for accessing this type.
+func (s *SQLStore) {{.StructName}}() *{{.StructName}}Store {
+	return &{{.StructName}}Store{SQLStore: s}
+}
+
+// tableName returns the name of the table.
+func (s *{{.StructName}}Store) tableName() string {
+	return "{{.NameUnderscore}}"
+}
+
+// joinTableName returns the name of the join table.
+func (s *{{.StructName}}Store) joinTableName() string {
+	return "join_table_name"
+}
+
+
+// tableStruct returns a variable of table type.
+func (s *{{.StructName}}Store) tableType() ty.{{.StructName}} {
+	return ty.{{.StructName}}{}
+}
+
+// tableFields returns the list of fields tagged with db
+func (s *{{.StructName}}Store) tableFields() []string {
+	return tfields(ty.{{.StructName}}{})
+}
+
+// {{.StructName}}List is a slice of Project with relevant methods.
+type {{.StructName}}List []ty.{{.StructName}}
+
+// {{.StructName}}Result implements {{.StructName}}Resulter by adding
+// to the slice.
+func (l *{{.StructName}}List) {{.StructName}}Result(o ty.{{.StructName}}) error {
+	*l = append(*l, o)
+	return nil
+}
+
+// {{.StructName}}Resulter can receive Project instances as they
+// are streamed from the underlying data source.
+type {{.StructName}}Resulter interface {
+	{{.StructName}}Result(ty.{{.StructName}}) error
+}
+
+// {{.StructName}}ResulterFunc allows implementation of {{.StructName}}Resulter as a function.
+type {{.StructName}}ResulterFunc func(o ty.{{.StructName}}) error
+
+// {{.StructName}}ResulterFunc implements {{.StructName}}Resulter by calling f.
+func (f {{.StructName}}ResulterFunc) {{.StructName}}Result(o ty.{{.StructName}}) error {
+	return f(o)
+}
+
+// Insert will insert a record.
+func (s *{{.StructName}}Store) Insert(ctx context.Context, o *ty.{{.StructName}}) error {
+
+	idAssign(o)
+	createTimeTouch(o)
+	updateTimeTouch(o)
+	if err := storeValidate(o); err != nil {
+		return err
+	}
+	tx, err := s.SQLStore.Session().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.RollbackUnlessCommitted()
+
+	_, err = tx.InsertInto(s.tableName()).
+		Columns(tfields(o)...).
+		Record(o).
+		Exec()
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// Delete removes a the indicated record.
+func (s *{{.StructName}}Store) Delete(ctx context.Context, v{{.PrimaryKeyField.FieldName}} string) error {
+
+	tx, err := s.SQLStore.Session().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.RollbackUnlessCommitted()
+
+	_, err = tx.DeleteFrom(s.tableName()).
+		Where("{{.PrimaryKeyField.NameUnderscore}} = ?", v{{.PrimaryKeyField.FieldName}}).
+		Exec()
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// Update overwrites an existing record.
+func (s *{{.StructName}}Store) Update(ctx context.Context, o *ty.{{.StructName}}) error {
+
+	tx, err := s.SQLStore.Session().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.RollbackUnlessCommitted()
+
+	// validate object for anything that should be enforced at database level
+	//  if err := o.CheckValid(); err != nil {
+	//  	return err
+	//  }
+
+	_, err = tUpdateSet(tx, s.tableName(), o).
+		Where("{{.PrimaryKeyField.NameUnderscore}}= ?", o.{{.PrimaryKeyField.FieldName}}).
+		Exec()
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// SelectByID returns the matching record by primary key.
+func (s *{{.StructName}}Store) SelectByID(ctx context.Context, v{{.PrimaryKeyField.FieldName}} string) (*ty.{{.StructName}}, error) {
+	tx, err := s.SQLStore.Session().BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.RollbackUnlessCommitted()
+
+	ret := s.tableType()
+	err = tx.Select(s.tableFields()...).
+		From(s.tableName()).
+		Where("{{.PrimaryKeyField.NameUnderscore}}= ?", v{{.PrimaryKeyField.FieldName}}).
+		LoadOne(&ret)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ret, tx.Commit()
+}
+
+{{ if ne .ForeignKeyField.FieldName ""}}
+// SelectBy{{.ForeignKeyField.FieldName}} returns the matching record by id.
+func (s *{{.StructName}}Store) SelectByID(ctx context.Context, v{{.ForeignKeyField.FieldName}} string) (*ty.{{.StructName}}, error) {
+	tx, err := s.SQLStore.Session().BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.RollbackUnlessCommitted()
+
+	ret := s.tableType()
+	err = tx.Select(s.tableFields()...).
+		From(s.tableName()).
+		Where("{{.ForeignKeyField.NameUnderscore}}= ?", v{{.ForeignKeyField.FieldName}}).
+		LoadOne(&ret)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ret, tx.Commit()
+}
+{{ end }}
+
+
+{{ if ne "" ""}}
+// SelectByUserIDAndNameLike joins projects and users and returns where the project name LIKE pjtNameLike.
+func (s *{{.StructName}}Store) SelectByUserIDAndNameLike(ctx context.Context, offset, limit int64, userID string, pjtNameLike string, result {{.StructName}}Resulter) error {
+
+	if result == nil {
+		return errors.New("result must not be nil")
+	}
+
+	ctx, tx, txCreated, err := s.ctxTxx(ctx)
+	if err != nil {
+		return err
+	}
+	if txCreated {
+		defer tx.Rollback()
+	}
+
+	var v ty.{{.StructName}}
+
+	whereArgs := []interface{}{
+		userID,
+		fmt.Sprintf("%%%s%%", pjtNameLike),
+	}
+
+	var sqlb strings.Builder
+	fmt.Fprintf(&sqlb, "SELECT p.* FROM `%s` p INNER JOIN user_project u ON u.project_id = p.project_id WHERE u.user_id = ? AND p.name LIKE ?",
+		//strings.Join(dbFieldQuote(dbFieldNames(&v, "project_id", "data")), ","),
+		s.tableName(),
+	)
+
+	if limit > 0 {
+		fmt.Fprintf(&sqlb, " LIMIT %d", limit)
+
+		if offset > 0 {
+			fmt.Fprintf(&sqlb, " OFFSET %d", offset)
+
+		}
+	}
+
+	rows, err := tx.QueryxContext(ctx, sqlb.String(), whereArgs...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		v = ty.{{.StructName}}{}
+		err := rows.StructScan(&v)
+		if err != nil {
+			return err
+		}
+		err = result.{{.StructName}}Result(v)
+		if err != nil {
+			return err
+		}
+	}
+	if txCreated {
+		return tx.Commit()
+	}
+	return nil
+}
+
+
+// SelectAllBy{{.ForeignKeyField.FieldName}} selects all records from {{.NameUnderscore}} via join table and {{.PrimaryKeyField.NameUnderscore}}
+func (s *{{.StructName}}Store) SelectAllBy{{.ForeignKeyField.FieldName}} (ctx context.Context, {{.ForeignKeyField.NameCamel}}  string, result {{.StructName}}Resulter) error {
+
+	if result == nil {
+		return errors.New("result must not be nil")
+	}
+
+	ctx, tx, txCreated, err := s.ctxTxx(ctx)
+	if err != nil {
+		return err
+	}
+	if txCreated {
+		defer tx.Rollback()
+	}
+
+	var v ty.{{.StructName}}
+
+	q := fmt.Sprintf(`SELECT %s FROM %s WHERE {{.PrimaryKeyField.NameUnderscore}}  IN (SELECT  {{.PrimaryKeyField.NameUnderscore}} FROM %s WHERE  {{.ForeignKeyField.NameUnderscore}} = ?)`,
+		strings.Join(dbFieldQuote(s.tableFields()), ","), s.tableName(), s.joinTablename(), 
+	)
+
+	rows, err := tx.QueryContext(ctx, q, {{.ForeignKeyField.NameCamel}})
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		v = ty.{{.StructName}}{}
+		err := rows.Scan(&v)
+		if err != nil {
+			return err
+		}
+		err = result.{{.StructName}}Result(v)
+		if err != nil {
+			return err
+		}
+	}
+	if txCreated {
+		return tx.Commit()
+	}
+	return nil
+}
+{{ end }}
+
+// Select runs the indicated query and loads it's return into result.
+// Offset is the number of rows to skip, limit is the maximum to return (after any skip/offset).
+// The criteria map is converted into a SQL WHERE clause (see sqlFilter in this package).
+// The orderBy slice is converted into a SQL ORDER BY clause (see sqlSort in this package).
+// Records are struct scanned and then passed into the appropriate method on result.
+// Note that for more complex query needs it is recommended you add a custom select function
+// instead of trying to adapt this one to every use case.
+func (s *{{.StructName}}Store) Select(ctx context.Context, offset, limit int64, critiera map[string]interface{}, orderBy []interface{}, result {{.StructName}}Resulter) error {
+
+	if result == nil {
+		return errors.New("result must not be nil")
+	}
+
+	ctx, tx, txCreated, err := s.ctxTxx(ctx)
+	if err != nil {
+		return err
+	}
+	if txCreated {
+		defer tx.Rollback()
+	}
+
+	var v ty.{{.StructName}}
+
+	whereSQL, whereArgs, err := sqlFilter(critiera, &v)
+	if err != nil {
+		return err
+	}
+	orderSQL, err := sqlSort(orderBy, &v)
+	if err != nil {
+		return err
+	}
+
+	var sqlb strings.Builder
+	fmt.Fprintf(&sqlb, "SELECT %s FROM `%s` ",
+		strings.Join(dbFieldQuote(s.tableFields()), ","),
+		s.tableName(),
+	)
+
+	if whereSQL != "" {
+		fmt.Fprintf(&sqlb, " WHERE %s", whereSQL)
+
+	}
+	if orderSQL != "" {
+		fmt.Fprintf(&sqlb, " ORDER BY %s", orderSQL)
+
+	}
+	if limit > 0 {
+		fmt.Fprintf(&sqlb, " LIMIT %d", limit)
+
+		if offset > 0 {
+			fmt.Fprintf(&sqlb, " OFFSET %d", offset)
+
+		}
+	}
+
+	rows, err := tx.QueryContext(ctx, sqlb.String(), whereArgs...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		v = ty.{{.StructName}}{}
+		err := rows.Scan(&v)
+		if err != nil {
+			return err
+		}
+		err = result.{{.StructName}}Result(v)
+		if err != nil {
+			return err
+		}
+	}
+	if txCreated {
+		return tx.Commit()
+	}
+	return nil
+}
+
+
+// SelectCursor is similar to Select but instead of specifying an offset and limit it uses a cursor.
+// Useful for efficiently iterating over large datasets.
+// The limit is the maximum to return (after any skip/offset).  Cursor is the prior cursor value
+// to continue receiving results from, or an empty string to start at the beginning.
+// The criteria map is converted into a SQL WHERE clause (see sqlFilter in this package).
+// The orderBy slice is converted into a SQL ORDER BY clause (see sqlSort in this package).
+// Records are struct scanned and then passed into the appropriate method on result.
+// Note that for more complex query needs it is recommended you add a custom select function
+// instead of trying to adapt this one to every use case.
+func (s *{{.StructName}}Store) SelectCursor(ctx context.Context, limit int64, cursor string, criteria map[string]interface{}, orderBy []interface{}, result {{.StructName}}Resulter) (nextCursor string, err error) {
+
+	if cursor != "" {
+		cursorj, err := base64.RawURLEncoding.DecodeString(cursor)
+		if err != nil {
+			return "", fmt.Errorf("cursor decode error: %w", err)
+		}
+		cspec := make(map[string]interface{})
+		err = json.Unmarshal(cursorj, &cspec)
+		if err != nil {
+			return "", fmt.Errorf("cursor unmarshal error: %w", err)
+		}
+		n := 0
+		ncriteria := make(map[string]interface{}, len(criteria))
+		for k, v := range criteria {
+			ncriteria[k] = v
+		}
+		for k, v := range cspec {
+			n++
+			if _, exists := ncriteria[k]; exists {
+				return "", fmt.Errorf("criteria contains cursor field %q", k)
+			}
+			if n == len(cspec) {
+				ncriteria[k] = map[string]interface{}{"$gt": v}
+			} else {
+				ncriteria[k] = map[string]interface{}{"$gte": v}
+			}
+		}
+		criteria = ncriteria
+	}
+
+	rcount := 0
+	cout := make(map[string]interface{}, len(orderBy))
+	r2 := {{.StructName}}ResulterFunc(func(o ty.{{.StructName}}) error {
+		rcount++
+		for _, ov := range orderBy {
+			switch ov2 := ov.(type) {
+			case string:
+				cout[ov2] = dbFieldValue(o, ov2)
+			case map[string]interface{}:
+				for k := range ov2 {
+					cout[k] = dbFieldValue(o, k)
+				}
+			default:
+				return fmt.Errorf("unknown type in orderBy entry %T", ov)
+			}
+		}
+		return result.{{.StructName}}Result(o)
+	})
+	//log.Printf("criteria: %#v", criteria)
+	//log.Printf("orderBy: %#v", orderBy)
+	err = s.Select(ctx, 0, limit, criteria, orderBy, &r2)
+	if err != nil {
+		return "", err
+	}
+
+	// if no results, then return the same cursor (at end of list)
+	if rcount == 0 {
+		return cursor, nil
+	}
+
+	cursorb, err := json.Marshal(cout)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(cursorb), nil
+}
+
+// Count returns the count of the result of the indicated query.
+func (s *{{.StructName}}Store) Count(ctx context.Context, critiera map[string]interface{}, orderBy []interface{}) (int64, error) {
+
+	ctx, tx, txCreated, err := s.ctxTxx(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if txCreated {
+		defer tx.Rollback()
+	}
+
+	var v ty.{{.StructName}}
+
+	whereSQL, whereArgs, err := sqlFilter(critiera, &v)
+	if err != nil {
+		return 0, err
+	}
+	orderSQL, err := sqlSort(orderBy, &v)
+	if err != nil {
+		return 0, err
+	}
+
+	var sqlb strings.Builder
+	fmt.Fprintf(&sqlb, "SELECT COUNT(1) c FROM `%s` ", s.tableName())
+	if whereSQL != "" {
+		fmt.Fprintf(&sqlb, " WHERE %s", whereSQL)
+	}
+	if orderSQL != "" {
+		fmt.Fprintf(&sqlb, " ORDER BY %s", orderSQL)
+	}
+
+	var ret int64
+	err = tx.QueryRowContext(ctx, sqlb.String(), whereArgs...).Scan(&ret)
+	if err != nil {
+		return 0, err
+	}
+
+	if txCreated {
+		return ret, tx.Commit()
+	}
+	return ret, nil
+}

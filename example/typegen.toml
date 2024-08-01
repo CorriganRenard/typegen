@@ -1,0 +1,17 @@
+# Configuration for typegen
+
+
+# web handlers dir
+web-handlers = "handlers"
+
+# sqlstore dir
+sqlstore = "sqlstore"
+
+# go types dir
+types = "ty"
+
+# base dir
+base-dir = "example"
+
+# schema
+schema = "schema.go"
