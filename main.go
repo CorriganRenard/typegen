@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"embed"
 	"flag"
 	"fmt"
 	"go/ast"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"text/template"
 	"unicode"
+
+	_ "embed"
 
 	"github.com/CorriganRenard/typegen/utils"
 	"github.com/spf13/viper"
@@ -45,9 +48,17 @@ func main() {
 		os.Exit(12)
 	}
 
+	//go:embed tmpl
+	var content embed.FS
+	parseFS := false
+
 	dir, err := os.ReadDir("tmpl")
 	if err != nil {
-		log.Fatalf("unable to read tmpl dir: %v", err)
+		parseFS = true
+		dir, err = content.ReadDir(".")
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	var tmplMap = make(map[string]string)
@@ -113,11 +124,20 @@ func main() {
 					log.Fatal(err)
 				}
 				defer file.Close()
+				var t *template.Template
+				if parseFS {
+					t, err = template.ParseFS(content, tmpl)
+					if err != nil {
+						log.Fatal(err)
+					}
 
-				t, err := template.ParseFiles(filepath.Join("tmpl", tmpl))
-				if err != nil {
-					log.Fatal(err)
+				} else {
+					t, err = template.ParseFiles(filepath.Join("tmpl", tmpl))
+					if err != nil {
+						log.Fatal(err)
+					}
 				}
+
 				err = t.Execute(file, won)
 				if err != nil {
 					log.Fatal(err)
