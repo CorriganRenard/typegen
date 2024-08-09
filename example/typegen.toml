@@ -25,3 +25,7 @@ base-dir = "example"
 
 # schema
 schema = "schema.go"
+
+
+# tmpl dir
+tmplDir = "tmpl"

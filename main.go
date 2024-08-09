@@ -22,6 +22,9 @@ import (
 	"github.com/spf13/viper"
 )
 
+//go:embed tmplfiles
+var content embed.FS
+
 func main() {
 
 	flag.Usage = func() {
@@ -48,14 +51,14 @@ func main() {
 		os.Exit(12)
 	}
 
-	//go:embed tmpl
-	var content embed.FS
+	tmplDir := viper.GetString("tmpl-dir")
+
 	parseFS := false
 
-	dir, err := os.ReadDir("tmpl")
+	dir, err := os.ReadDir(tmplDir)
 	if err != nil {
 		parseFS = true
-		dir, err = content.ReadDir(".")
+		dir, err = content.ReadDir("tmplfiles")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -72,6 +75,8 @@ func main() {
 	log.Printf("%#v", tmplMap)
 
 	baseDir, _ := filepath.Abs(viper.GetString("base-dir"))
+	baseDir = ""
+
 	schemaFile := filepath.Join(baseDir, viper.GetString("schema"))
 
 	basePackage := viper.GetString("base-package")
@@ -100,11 +105,11 @@ func main() {
 
 		oNameDash, _, _, _ := getVariations(won.StructName)
 
-		for tmpl, packagePath := range tmplMap {
+		for tmpl1, packagePath := range tmplMap {
 			fileExt := filepath.Ext(packagePath)
 			packagePath = strings.TrimSuffix(packagePath, fileExt)
 			testSuffix := ""
-			if strings.Contains(tmpl, "_test") {
+			if strings.Contains(tmpl1, "_test") {
 				testSuffix = "_test"
 			}
 			fpath := filepath.Join(baseDir, packagePath, oNameDash+testSuffix+fileExt)
@@ -126,13 +131,13 @@ func main() {
 				defer file.Close()
 				var t *template.Template
 				if parseFS {
-					t, err = template.ParseFS(content, tmpl)
+					t, err = template.ParseFS(content, tmpl1)
 					if err != nil {
 						log.Fatal(err)
 					}
 
 				} else {
-					t, err = template.ParseFiles(filepath.Join("tmpl", tmpl))
+					t, err = template.ParseFiles(filepath.Join("tmpl", tmpl1))
 					if err != nil {
 						log.Fatal(err)
 					}
