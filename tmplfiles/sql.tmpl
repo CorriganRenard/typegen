@@ -161,7 +161,7 @@ func (s *{{$won.StructName}}Store) SelectBy{{$fk.FieldName}}(ctx context.Context
 	tx, err := s.SQLStore.Session().BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
-	}{
+	}
 	defer tx.RollbackUnlessCommitted()
 
 	ret := s.tableType()

@@ -52,12 +52,12 @@ func (o *{{.StructName}}) AccessProjectID() string { return o.ProjectID }
 
     const (
         {{ range $key, $enum := $field.Enums }}
-            {{ if eq $field.TagValue2 "int" }}
-            {{ $field.FieldType }}{{ $enum.FieldName }}   = {{ $field.FieldType }}({{ $key }})
-            {{ else }}
+            {{- if eq $field.TagValue2 "int" }}
+            {{ $field.FieldType }}{{ $enum.FieldName }}  = {{ $field.FieldType }}({{ $key }})
+            {{- else }}
             {{ $field.FieldType }}{{ $enum.FieldName }}   = {{ $field.FieldType }}("{{ $enum.NameDash }}")
-            {{ end }}
-        {{- end }}
+            {{- end }}
+        {{- end -}}
     )
     {{ end }}
 {{ end }}

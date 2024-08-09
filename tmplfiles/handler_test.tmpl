@@ -38,7 +38,7 @@ func Test{{ $won.StructName }}Handler(t *testing.T) {
 
 		r, _ := http.NewRequestWithContext(rctx, "GET", fmt.Sprintf("/api/{{ $won.NameDash }}/{{ $won.NameFirstChar}}/%s", "hello"), &bytes.Buffer{})
 		r.AddCookie(rcookie)
-		h.ServeHTTP(w, r)
+		h.Router.ServeHTTP(w, r)
 		res := w.Result()
 
 		assert.Equal(403, res.StatusCode)
@@ -47,14 +47,14 @@ func Test{{ $won.StructName }}Handler(t *testing.T) {
 
 	t.Run("should return 201 if the record is created successfully", func(t *testing.T) {
 
-		new{{ $won.StructName }} := ty.{{ $won.StructName }}{ProjectID: pid, {{ $won.PrimaryKeyField }}: pid}
+		new{{ $won.StructName }} := ty.{{ $won.StructName }}{ProjectID: pid, {{ $won.PrimaryKeyField.FieldName }}: pid}
 		new{{ $won.StructName }}Bytes, _ := json.Marshal(&new{{ $won.StructName }})
 
 		w := httptest.NewRecorder()
 
 		r, _ := http.NewRequestWithContext(rctx, "POST", "/api/{{ $won.NameDash }}", bytes.NewBuffer(new{{ $won.StructName }}Bytes))
 		r.AddCookie(rcookie)
-		h.ServeHTTP(w, r)
+		h.Router.ServeHTTP(w, r)
 		res := w.Result()
 
 		assert.Equal(201, res.StatusCode)
@@ -70,7 +70,7 @@ func Test{{ $won.StructName }}Handler(t *testing.T) {
 
 		r, _ := http.NewRequestWithContext(rctx, "GET",  fmt.Sprintf("/api/{{ $won.NameDash }}/{{ $won.NameFirstChar}}/%s", pid), &bytes.Buffer{})
 		r.AddCookie(rcookie)
-		h.ServeHTTP(w, r)
+		h.Router.ServeHTTP(w, r)
 		res := w.Result()
 
 		assert.Equal(200, res.StatusCode)
@@ -83,7 +83,7 @@ func Test{{ $won.StructName }}Handler(t *testing.T) {
 
 	t.Run("should return 200 if the record is updated successfully", func(t *testing.T) {
 
-		new{{ $won.StructName }} := ty.{{ $won.StructName }}{ProjectID: pid, {{ $won.PrimaryKeyField }}: pid}
+		new{{ $won.StructName }} := ty.{{ $won.StructName }}{ProjectID: pid,  {{ $won.PrimaryKeyField.FieldName }}: pid}
 		new{{ $won.StructName }}Bytes, _ := json.Marshal(&new{{ $won.StructName }})
 
 
@@ -91,7 +91,7 @@ func Test{{ $won.StructName }}Handler(t *testing.T) {
 
 		r, _ := http.NewRequestWithContext(rctx, "PATCH", "/api/{{ $won.NameDash }}", bytes.NewBuffer(new{{ $won.StructName }}Bytes))
 		r.AddCookie(rcookie)
-		h.ServeHTTP(w, r)
+		h.Router.ServeHTTP(w, r)
 		res := w.Result()
 
 		assert.Equal(200, res.StatusCode)
@@ -108,7 +108,7 @@ func Test{{ $won.StructName }}Handler(t *testing.T) {
 
 		r, _ := http.NewRequestWithContext(rctx, "DELETE",  fmt.Sprintf("/api/{{ $won.NameDash }}/{{ $won.NameFirstChar}}/%s", pid), &bytes.Buffer{})
 		r.AddCookie(rcookie)
-		h.ServeHTTP(w, r)
+		h.Router.ServeHTTP(w, r)
 		res := w.Result()
 
 		assert.Equal(200, res.StatusCode)

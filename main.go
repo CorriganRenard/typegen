@@ -23,6 +23,7 @@ import (
 )
 
 //go:embed tmplfiles
+//go:embed tmplfiles/*
 var content embed.FS
 
 func main() {
@@ -62,6 +63,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		log.Printf("dir: %#v", dir)
 	}
 
 	var tmplMap = make(map[string]string)
@@ -131,7 +133,7 @@ func main() {
 				defer file.Close()
 				var t *template.Template
 				if parseFS {
-					t, err = template.ParseFS(content, tmpl1)
+					t, err = template.ParseFS(content, fmt.Sprintf("tmplfiles/%s", tmpl1))
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -268,7 +270,7 @@ func getVariations(oName string) (dash, underscore, camel, firstChar string) {
 	if err != nil {
 		log.Printf("unabled to splitObjWords for %v:  %v", oName, err)
 	}
-	return strings.Join(oNameParts, "-"), strings.Join(oNameParts, "_"), lowerCamelJoin(oNameParts), oName[0:1]
+	return strings.Join(oNameParts, "-"), strings.Join(oNameParts, "_"), lowerCamelJoin(oNameParts), strings.ToLower(oName[0:1])
 
 }
 
