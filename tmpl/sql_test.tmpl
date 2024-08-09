@@ -1,7 +1,9 @@
+{{ $won := . }}
+
 package sqlstore
 
 import (
-	"bootstraphost/ty"
+	"{{ $won.BasePackage }}/ty"
 	"context"
 	"errors"
 	"testing"

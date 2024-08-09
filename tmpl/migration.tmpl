@@ -1,12 +1,12 @@
 {{ $won := . }}
 -- +goose Up
-USE `bootstraphost` ;
+USE `{{ $won.BasePackage }}` ;
 
-CREATE TABLE IF NOT EXISTS `bootstraphost`.`{{ $won.NameUnderscore}}` (
+CREATE TABLE IF NOT EXISTS `{{ $won.BasePackage }}`.`{{ $won.NameUnderscore}}` (
     {{- range $field := $won.StructFields }}
     `{{ $field.NameUnderscore }}` {{ call $won.GetDBType $field "" }},
     {{- end }}
     PRIMARY KEY(`{{ $won.PrimaryKeyField.NameUnderscore }}`)
 );
 -- +goose Down
-DROP TABLE IF EXISTS `bootstraphost`.`{{ $won.NameUnderscore }}`;
+DROP TABLE IF EXISTS `{{ $won.BasePackage }}`.`{{ $won.NameUnderscore }}`;

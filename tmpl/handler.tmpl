@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"bootstraphost/sqlstore"
-	"bootstraphost/ty"
-	"bootstraphost/wutil"
+	"{{ $won.BasePackage }}/sqlstore"
+	"{{ $won.BasePackage }}/ty"
+	"{{ $won.BasePackage }}/wutil"
 
-	"bootstraphost/bootstraphost"
-	"bootstraphost/security"
+	"{{ $won.BasePackage }}/{{ $won.BasePackage }}"
+	"{{ $won.BasePackage }}/security"
 
 	"github.com/d0sbit/werr"
 	"github.com/julienschmidt/httprouter"
@@ -54,11 +54,11 @@ func New{{$won.StructName}}Handler(sqlstore *sqlstore.SQLStore, security *securi
 	return h
 }
 
-// AdminHandler has admin-only functionality.
-type ProjectHandler struct {
+// {{$won.StructName}}Handler 
+type {{$won.StructName}}Handler struct {
 	*httprouter.Router
 	security *security.Authenticator
-	DBStore  *bootstraphost.DBStore
+	DBStore  *{{ $won.BasePackage }}.DBStore
 	SQLStore *sqlstore.SQLStore
 }
 

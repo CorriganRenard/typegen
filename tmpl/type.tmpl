@@ -1,7 +1,9 @@
+{{ $won := . }}
+
 package ty
 
 import (
-	"bootstraphost/id"
+	"{{ $won.BasePackage }}/id"
 	"database/sql/driver"
 	"time"
 )

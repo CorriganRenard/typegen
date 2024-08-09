@@ -13,6 +13,9 @@ type = "ty.go"
 # migrations dir
 migration = "migrations.sql"
 
+# base package
+base-package = "bsh"
+
 
 # ui dir
 ui = "ui.ts"

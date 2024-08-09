@@ -22,9 +22,9 @@ import (
 func main() {
 
 	flag.Usage = func() {
-		fmt.Printf("Usage: go run z_new_store.go ObjectName\n\n")
-		fmt.Printf("ObjectName should be replaced with the name of an object in the system that corresponds to a database table. This script will produce a new sqlstore for the specified object.  The struct definition for ObjectName must already exist in order for the resulting code to compile.\n\n")
-		fmt.Printf("ObjectName will be converted into object-name when used in file names and object_name for JSON and database field use.  object-name.go and object-name_test.go will be generated (and will not be overwritten if they already exiist).  The files created by this script are meant as a starting point and can and should be modified by the developer to accommodate the needs of this specific object in the system - the point of this script is to make it quick to set up a new type and generate some of the boilerplate code involved.\n\n")
+		fmt.Printf("Usage: typegen \n\n")
+		fmt.Printf("reads from default config file 'typgen.toml' in current directory.\n\n")
+		fmt.Printf("config file should contian schema.go filename, directory names for generated files, see example.\n\n")
 	}
 
 	configDirF := flag.String("config-dir", "./", "Load configuration from the specified directory")
@@ -41,7 +41,7 @@ func main() {
 
 	err := viper.ReadInConfig() // Find and read the config file
 	if err != nil {             // Handle errors reading the config file
-		fmt.Printf("config not found in: %q\n", configDirF)
+		fmt.Printf("config not found in: %q\n", *configDirF)
 		os.Exit(12)
 	}
 
@@ -63,6 +63,8 @@ func main() {
 	baseDir, _ := filepath.Abs(viper.GetString("base-dir"))
 	schemaFile := filepath.Join(baseDir, viper.GetString("schema"))
 
+	basePackage := viper.GetString("base-package")
+
 	fset := token.NewFileSet()
 
 	file, err := parser.ParseFile(fset, schemaFile, nil, parser.ParseComments)
@@ -75,8 +77,9 @@ func main() {
 
 	log.Printf("len wons: %v", len(savedWons))
 	for _, won := range savedWons {
+		won.BasePackage = basePackage
 		if len(won.StructName) == 0 {
-			fmt.Println("ObjectName cannot be empty %q\n", won.StructName)
+			fmt.Printf("ObjectName cannot be empty %q\n", won.StructName)
 			os.Exit(11)
 		}
 		if !(unicode.IsLetter(rune(won.StructName[0])) && unicode.IsUpper(rune(won.StructName[0]))) {
@@ -245,6 +248,7 @@ func getVariations(oName string) (dash, underscore, camel, firstChar string) {
 }
 
 type Won struct {
+	BasePackage    string
 	StructName     string
 	NameDash       string
 	NameUnderscore string
