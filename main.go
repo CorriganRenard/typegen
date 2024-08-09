@@ -45,11 +45,20 @@ func main() {
 		os.Exit(12)
 	}
 
-	typesP := viper.GetString("types")
-	handlersP := viper.GetString("web-handlers")
-	sqlstoreP := viper.GetString("sqlstore")
+	dir, err := os.ReadDir("tmpl")
+	if err != nil {
+		log.Fatalf("unable to read tmpl dir: %v", err)
+	}
 
-	log.Printf("types package: %v handlers package: %v sqlstore package: %v", typesP, handlersP, sqlstoreP)
+	var tmplMap = make(map[string]string)
+	for _, v := range dir {
+		prefix := strings.TrimSuffix(v.Name(), ".tmpl")
+		prefix = strings.TrimSuffix(prefix, "_test")
+		// log.Printf("tmpl %v dir %v", v.Name(), viper.GetString(prefix))
+		tmplMap[v.Name()] = viper.GetString(prefix)
+	}
+
+	log.Printf("%#v", tmplMap)
 
 	baseDir, _ := filepath.Abs(viper.GetString("base-dir"))
 	schemaFile := filepath.Join(baseDir, viper.GetString("schema"))
@@ -64,9 +73,10 @@ func main() {
 	// parses the schema file and returns template struct
 	savedWons := parseWons(file)
 
+	log.Printf("len wons: %v", len(savedWons))
 	for _, won := range savedWons {
 		if len(won.StructName) == 0 {
-			fmt.Printf("ObjectName cannot be empty\n")
+			fmt.Println("ObjectName cannot be empty %q\n", won.StructName)
 			os.Exit(11)
 		}
 		if !(unicode.IsLetter(rune(won.StructName[0])) && unicode.IsUpper(rune(won.StructName[0]))) {
@@ -74,35 +84,34 @@ func main() {
 			os.Exit(12)
 		}
 
-		oNameDash, _, _ := getVariations(won.StructName)
+		oNameDash, _, _, _ := getVariations(won.StructName)
 
-		for _, tmpl := range []string{"sqlstore2.tmpl", "sqlstore2_test.tmpl", "types.tmpl"} {
+		for tmpl, packagePath := range tmplMap {
+			fileExt := filepath.Ext(packagePath)
+			packagePath = strings.TrimSuffix(packagePath, fileExt)
 			testSuffix := ""
 			if strings.Contains(tmpl, "_test") {
 				testSuffix = "_test"
 			}
-			var packagePath string
-			if strings.HasPrefix(tmpl, "types") {
-				packagePath = typesP
-			} else if strings.HasPrefix(tmpl, "sqlstore") {
-
-				packagePath = sqlstoreP
-			} else if strings.HasPrefix(tmpl, "handler") {
-				packagePath = handlersP
-			} else {
-				log.Fatalf("malformed tmpl prefix: %v must be one of []{sqlstore, types, handler}", tmpl)
-			}
-			fpath := filepath.Join(baseDir, packagePath, oNameDash+testSuffix+".go")
+			fpath := filepath.Join(baseDir, packagePath, oNameDash+testSuffix+fileExt)
 			if _, err := os.Stat(fpath); err != nil {
 				// file doesn't exist -- write it
+
+				if _, err := os.Stat(filepath.Join(baseDir, packagePath)); os.IsNotExist(err) {
+					log.Printf("creating dir: %v", filepath.Join(baseDir, packagePath))
+					err = os.MkdirAll(filepath.Join(baseDir, packagePath), 0700) // Create the dir
+					if err != nil {
+						log.Fatal(err)
+					}
+				}
+
 				file, err := os.Create(fpath)
 				if err != nil {
 					log.Fatal(err)
 				}
 				defer file.Close()
 
-				tmplFile := tmpl
-				t, err := template.New(tmplFile).ParseFiles(filepath.Join("tmpl", tmplFile))
+				t, err := template.ParseFiles(filepath.Join("tmpl", tmpl))
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -113,7 +122,10 @@ func main() {
 
 				file.Close()
 
-				runGofmt(fpath)
+				if fileExt == ".go" {
+					runGofmt(fpath)
+
+				}
 			}
 		}
 	}
@@ -122,7 +134,7 @@ func main() {
 func parseWons(file ast.Node) []Won {
 
 	var savedWons []Won
-	var won Won
+	var won = NewWon()
 
 	ast.Inspect(file, func(x ast.Node) bool {
 		log.Printf("inspecting")
@@ -130,9 +142,9 @@ func parseWons(file ast.Node) []Won {
 		if ok {
 			log.Printf("struct name: %s", st.Name.Name)
 
-			won = Won{StructName: st.Name.Name}
-
-			won.NameDash, won.NameUnderscore, won.NameCamel = getVariations(won.StructName)
+			won = NewWon()
+			won.StructName = st.Name.Name
+			won.NameDash, won.NameUnderscore, won.NameCamel, won.NameFirstChar = getVariations(won.StructName)
 
 		}
 		s, ok := x.(*ast.StructType)
@@ -152,6 +164,7 @@ func parseWons(file ast.Node) []Won {
 			log.Printf("field split: %#v", jsonFields)
 
 			var possibleJSONFields []StructField
+
 			for _, v := range jsonFields {
 				if v == "" {
 					continue
@@ -159,12 +172,12 @@ func parseWons(file ast.Node) []Won {
 				newJSONField := StructField{}
 				newJSONField.FieldName = v
 				newJSONField.FieldType = "string"
-				newJSONField.NameDash, newJSONField.NameUnderscore, newJSONField.NameCamel = getVariations(v)
+				newJSONField.NameDash, newJSONField.NameUnderscore, newJSONField.NameCamel, newJSONField.NameFirstChar = getVariations(v)
 				possibleJSONFields = append(possibleJSONFields, newJSONField)
 			}
 			log.Printf("possibleJsonFields: %#v", possibleJSONFields)
 
-			saveField.NameDash, saveField.NameUnderscore, saveField.NameCamel = getVariations(saveField.FieldName)
+			saveField.NameDash, saveField.NameUnderscore, saveField.NameCamel, saveField.NameFirstChar = getVariations(saveField.FieldName)
 
 			// fmt.Printf("Field: %s\n", field.Names[0].Name)
 			// fmt.Printf("type: %s\n", field.Type)
@@ -192,7 +205,7 @@ func parseWons(file ast.Node) []Won {
 					switch saveField.TagValue {
 					case "enum": // get enum type, insert enumfields
 						// enumType := saveField.TagValue2
-						saveField.Enums = jsonFields
+						saveField.Enums = possibleJSONFields
 					case "json_struct": // get struct fields from comment, insert jsonfields
 						saveField.JSONFields = possibleJSONFields
 					case "time":
@@ -204,27 +217,30 @@ func parseWons(file ast.Node) []Won {
 			if isPK && len(won.PrimaryKeyField.FieldName) == 0 {
 				won.PrimaryKeyField = saveField
 			}
-			if isFK && len(won.ForeignKeyField.FieldName) == 0 {
-				won.ForeignKeyField = saveField
+			if isFK {
+				won.ForeignKeyField = append(won.ForeignKeyField, saveField)
 			}
 
 			//log.Printf("json fields: %v", won.JSONFields)
 
 			won.StructFields = append(won.StructFields, saveField)
 		}
-		savedWons = append(savedWons, won)
+		if won.StructName != "" {
+			savedWons = append(savedWons, won)
+		}
+
 		return false
 	})
 
 	return savedWons
 }
 
-func getVariations(oName string) (dash, underscore, camel string) {
+func getVariations(oName string) (dash, underscore, camel, firstChar string) {
 	oNameParts, err := utils.SplitObjWords(oName)
 	if err != nil {
 		log.Printf("unabled to splitObjWords for %v:  %v", oName, err)
 	}
-	return strings.Join(oNameParts, "-"), strings.Join(oNameParts, "_"), lowerCamelJoin(oNameParts)
+	return strings.Join(oNameParts, "-"), strings.Join(oNameParts, "_"), lowerCamelJoin(oNameParts), oName[0:1]
 
 }
 
@@ -233,25 +249,59 @@ type Won struct {
 	NameDash       string
 	NameUnderscore string
 	NameCamel      string
+	NameFirstChar  string
 
 	StructFields    []StructField
 	PrimaryKeyField StructField
-	ForeignKeyField StructField
+	ForeignKeyField []StructField
 	EnumFields      []StructField
 	JSONFields      []StructField
 	TimeFields      []StructField
+	GetDBType       func(StructField, string) string
 }
+
+func NewWon() Won {
+	w := Won{}
+	w.GetDBType = func(sf StructField, suffix string) string {
+		switch sf.FieldType {
+		case "string":
+			return "VARCHAR(128) NOT NULL"
+		case "int", "int64":
+			return "INT NOT NULL"
+		case "float64", "float32":
+			return "DOUBLE NOT NULL"
+		case "Timestamp", "time.Time":
+			return "DATETIME(6) NOT NULL"
+		default:
+			switch sf.TagValue {
+			case "json_struct":
+				return `TEXT NOT NULL DEFAULT "{}"`
+			case "enum":
+				if sf.TagValue2 == "string" {
+					return `VARCHAR(128) NOT NULL DEFAULT ""`
+				} else {
+					return "INT NOT NULL DEFAULT 0"
+				}
+			}
+		}
+		return "invalid_type"
+	}
+	return w
+
+}
+
 type StructField struct {
 	FieldName      string
 	NameDash       string
 	NameUnderscore string
 	NameCamel      string
+	NameFirstChar  string
 
 	FieldType string
 	TagType   string
 	TagValue  string
 	TagValue2 string
-	Enums     []string
+	Enums     []StructField
 
 	JSONFields []StructField
 }

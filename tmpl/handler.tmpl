@@ -1,0 +1,346 @@
+{{ $won := . }}
+
+package handlers
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"bootstraphost/sqlstore"
+	"bootstraphost/ty"
+	"bootstraphost/wutil"
+
+	"bootstraphost/bootstraphost"
+	"bootstraphost/security"
+
+	"github.com/d0sbit/werr"
+	"github.com/julienschmidt/httprouter"
+)
+
+// New{{$won.StructName}}Handler returns a new instance of {{$won.StructName}}Handler.
+func New{{$won.StructName}}Handler(sqlstore *sqlstore.SQLStore, security *security.Authenticator) *{{$won.StructName}}Handler {
+	h := &{{$won.StructName}}Handler{
+		SQLStore: sqlstore,
+		security: security,
+		Router:   httprouter.New(),
+	}
+
+	h.Router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+
+	// CRUD operations
+	// creates {{$won.StructName}}
+	h.Router.POST("/api/{{$won.NameDash}}", h.Post)
+	// reads {{$won.StructName}} by ID
+	h.Router.GET("/api/{{$won.NameDash}}/{{$won.NameFirstChar}}/:id", h.GetByID)
+	// reads list of {{$won.StructName}} for logged in user
+	h.Router.GET("/api/{{$won.NameDash}}", h.GetList)
+	// updates a single {{$won.StructName}}
+	h.Router.PATCH("/api/{{$won.NameDash}}", h.Update)
+	// deletes {{$won.StructName}} by ID
+	h.Router.DELETE("/api/{{$won.NameDash}}/{{$won.NameFirstChar}}/:id", h.Delete)
+
+	{{ range $fk := $won.ForeignKeyField }}
+	// selects {{$won.StructName}} by {{$fk.FieldName}}
+	h.Router.GET("/api/{{$won.NameDash}}/{{$fk.NameDash}}/:id", h.GetListBy{{$fk.FieldName}})
+	{{ end }}
+
+
+
+	// Admin only 
+	h.Router.PATCH("/api/{{$won.NameDash}}/admin", h.PatchAdmin)
+	h.Router.GET("/api/{{$won.NameDash}}/admin", h.GetListAdmin)
+
+	return h
+}
+
+// AdminHandler has admin-only functionality.
+type ProjectHandler struct {
+	*httprouter.Router
+	security *security.Authenticator
+	DBStore  *bootstraphost.DBStore
+	SQLStore *sqlstore.SQLStore
+}
+
+// Post inserts a {{$won.StructName}} into the database
+func (h *{{$won.StructName}}Handler) Post(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+
+	wutil.WriteError(w, func() (err error) {
+
+		u, err := h.security.LoggedInUser(r)
+		if err != nil {
+			return werr.ErrorCodeShowf(401, err, "unauthenticated")
+		}
+
+		var toCreate ty.{{$won.StructName}}
+		if err := json.NewDecoder(r.Body).Decode(&toCreate); err != nil {
+			return wutil.ErrorCodeShowf(http.StatusBadRequest, err, "error decoding from body")
+		}
+
+		err = h.security.CheckUserAccess(u, &toCreate, security.ActionCreate)
+		if err != nil {
+			return werr.ErrorCodeShowf(403, err, "unauthorized")
+		}
+
+		err = h.SQLStore.{{$won.StructName}}().Insert(r.Context(), &toCreate)
+		if err != nil {
+			return err
+		}
+
+		// pu := ty.UserProject{
+		// 	ProjectID: toCreate.ProjectID,
+		// 	UserID:    u.UserID,
+		// }
+		// pu.Data.IsAdmin = true
+		// err = h.SQLStore.UserProject().Insert(r.Context(), &pu)
+		// if err != nil {
+		// 	return err
+		// }
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		return json.NewEncoder(w).Encode(toCreate)
+
+	}())
+
+}
+
+
+// GetByID gets a {{$won.StructName}} by id from the database
+func (h *{{$won.StructName}}Handler) GetByID(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+
+	wutil.WriteError(w, func() (err error) {
+
+		idStr := params.ByName("id")
+
+		u, err := h.security.LoggedInUser(r)
+		if err != nil {
+			return werr.ErrorCodeShowf(401, err, "unauthenticated")
+		}
+
+		var access = ty.{{$won.StructName}}{ {{$won.PrimaryKeyField.FieldName}}: idStr}
+
+		err = h.security.CheckUserAccess(u, &access, security.ActionRead)
+		if err != nil {
+			return werr.ErrorCodeShowf(403, err, "unauthorized")
+		}
+
+		{{$won.NameCamel}}, err := h.SQLStore.{{$won.StructName}}().SelectByID(r.Context(), idStr)
+		if err != nil {
+			return err
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		return json.NewEncoder(w).Encode({{$won.NameCamel}})
+	}())
+
+}
+
+
+// GetList selects all Projects accessible by current logged in user
+func (h *{{$won.StructName}}Handler) GetList(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+
+	wutil.WriteError(w, func() (err error) {
+		u, err := h.security.LoggedInUser(r)
+		if err != nil {
+			return werr.ErrorCodeShowf(401, err, "unauthenticated")
+		}
+
+		{{$won.NameCamel}}List := sqlstore.{{$won.NameCamel}}List{}
+
+		err = h.sqlstore.{{$won.StructName}}().SelectByUserIDAndNameLike(r.Context(), 0, 0, u.UserID, "", &{{$won.NameCamel}}List)
+		if err != nil {
+			return err
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		return json.NewEncoder(w).Encode({{$won.NameCamel}}List)
+	}())
+
+}
+
+
+// Update updates a {{$won.StructName}} in the database
+func (h *{{$won.StructName}}Handler) Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	writeUIResponseError(w, func() error {
+
+		u, err := h.security.LoggedInUser(r)
+		if err != nil {
+			return werr.ErrorCodeShowf(401, err, "unauthenticated")
+		}
+
+		var {{$won.NameCamel}} ty.{{$won.StructName}}
+		err = json.NewDecoder(r.Body).Decode(&{{$won.NameCamel}})
+		if err != nil {
+			return err
+		}
+
+		err = h.security.CheckUserAccess(u, &{{$won.NameCamel}}, security.ActionUpdate)
+		if err != nil {
+			return werr.ErrorCodeShowf(403, err, "unauthorized")
+		}
+
+		// log.Printf("[UpdateUser] DEBUG, req %#v", req)
+
+		projectDB, err := h.sqlstore.{{$won.StructName}}().SelectByID(r.Context(), project.ProjectID)
+		if err != nil {
+			return err
+		}
+
+		if u.UserID != projectDB.Data.UserHostID {
+			return fmt.Errorf("you can only update your own user record for now")
+		}
+		// We don't change email here, check UpdatePasswordOrEmail instead.
+		projectDB.Name = project.Name
+
+		err = h.sqlstore.{{$won.StructName}}().Update(r.Context(), projectDB)
+		if err != nil {
+			return err
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		err = json.NewEncoder(w).Encode(&{{$won.NameCamel}})
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}())
+}
+
+
+// DeleteProject deletes a record from the database
+func (h *{{$won.StructName}}Handler) Delete(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+
+	wutil.WriteError(w, func() (err error) {
+
+		u, err := h.security.LoggedInUser(r)
+		if err != nil {
+			return werr.ErrorCodeShowf(401, err, "unauthenticated")
+		}
+
+		uidStr := params.ByName("uid")
+
+		var {{$won.NameCamel}} = ty.{{$won.StructName}}{ProjectID: uidStr}
+
+		err = h.security.CheckUserAccess(u, &{{$won.NameCamel}}, security.ActionDelete)
+		if err != nil {
+			return werr.ErrorCodeShowf(403, err, "unauthorized")
+		}
+
+		// var user sqlstore.User
+		// if err := json.NewDecoder(r.Body).Decode(&{{$won.NameCamel}}); err != nil {
+		// 	return wutil.ErrorCodeShowf(http.StatusBadRequest, err, "error decoding skuProdInfo from body")
+		// }
+
+		err = h.sqlstore.{{$won.StructName}}().Delete(r.Context(), uidStr)
+		if err != nil {
+			return err
+		}
+
+		//w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		return nil
+
+	}())
+
+}
+
+
+
+{{ range $fk := $won.ForeignKeyField }}
+	
+// GetListBy{{$fk.FieldName}} lists {{$won.StructName}} by {{$fk.FieldName}}
+func (h *{{$won.StructName}}Handler) GetListBy{{$fk.FieldName}}(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+
+	wutil.WriteError(w, func() (err error) {
+
+		idStr := params.ByName("id")
+
+		u, err := h.security.LoggedInUser(r)
+		if err != nil {
+			return werr.ErrorCodeShowf(401, err, "unauthenticated")
+		}
+
+		var access = ty.{{$won.StructName}}{ {{$fk.FieldName}}: idStr}
+
+		err = h.security.CheckUserAccess(u, &access, security.ActionRead)
+		if err != nil {
+			return werr.ErrorCodeShowf(403, err, "unauthorized")
+		}
+
+
+		{{$won.NameCamel}}List, err = h.SQLStore.{{$won.StructName}}().SelectBy{{$fk.FieldName}}(r.Context(), idStr)
+		if err != nil {
+			return err
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		return json.NewEncoder(w).Encode({{$won.NameCamel}}List)
+	}())
+
+}
+{{ end }}
+
+
+
+
+// PatchAdmin updates a {{$won.StructName}} in the database - updates all fields, for admins only
+func (h *{{$won.StructName}}Handler) PatchAdmin(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+
+	wutil.WriteError(w, func() (err error) {
+
+		u, err := h.security.LoggedInUser(r)
+		if err != nil {
+			return werr.ErrorCodeShowf(401, err, "unauthenticated")
+		}
+		if !u.Data.IsAdmin {
+			return werr.ErrorCodeShowf(403, err, "unauthorized")
+
+		}
+		var {{$won.NameCamel}} ty.{{$won.StructName}}
+		if err := json.NewDecoder(r.Body).Decode(&{{$won.NameCamel}}); err != nil {
+			return wutil.ErrorCodeShowf(http.StatusBadRequest, err, "error decoding skuProdInfo from body")
+		}
+
+		err = h.sqlstore.{{$won.StructName}}().Update(r.Context(), &{{$won.NameCamel}})
+		if err != nil {
+			return err
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		return json.NewEncoder(w).Encode({{$won.NameCamel}})
+	}())
+
+}
+
+// GetListAdmin selects all {{$won.StructName}} from the database
+func (h *{{$won.StructName}}Handler) GetListAdmin(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+
+	wutil.WriteError(w, func() (err error) {
+		u, err := h.security.LoggedInUser(r)
+		if err != nil {
+			return werr.ErrorCodeShowf(401, err, "unauthenticated")
+		}
+		if !u.Data.IsAdmin {
+			return werr.ErrorCodeShowf(403, err, "unauthorized")
+
+		}
+
+		{{$won.NameCamel}}List := sqlstore.{{$won.NameCamel}}List{}
+
+		err = h.sqlstore.{{$won.StructName}}().Select(r.Context(), 0, 0, nil, nil, &{{$won.NameCamel}}List)
+		if err != nil {
+			return err
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		return json.NewEncoder(w).Encode({{$won.NameCamel}}List)
+	}())
+
+}

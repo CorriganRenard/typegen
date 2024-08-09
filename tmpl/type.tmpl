@@ -1,0 +1,62 @@
+package ty
+
+import (
+	"bootstraphost/id"
+	"database/sql/driver"
+	"time"
+)
+
+type {{.StructName}} struct {
+{{ range .StructFields }}
+  {{ .FieldName }} {{ .FieldType }}  `db:"{{ .NameUnderscore }}" json:"{{ .NameUnderscore }}"`
+{{- end }}
+}
+
+
+
+// UpdateTimeTouched and CreateTimeToucher interfaces implementation
+func (o *{{.StructName}}) IDAssign() {
+	if o.{{.PrimaryKeyField.FieldName}} == "" {
+		o.{{.PrimaryKeyField.FieldName}} = id.Next()
+	}
+}
+func (o *{{.StructName}}) CreateTimeTouch() { o.CreatedAt = Timestamp(time.Now()) }
+func (o *{{.StructName}}) UpdateTimeTouch() { o.UpdatedAt = Timestamp(time.Now()) }
+
+// AccessProjectID implements Accessible
+func (o *{{.StructName}}) AccessProjectID() string { return o.ProjectID }
+
+
+
+{{ range $field := .StructFields }}
+    {{ if eq $field.TagValue "json_struct" }}
+    type {{ $field.FieldType }} struct {
+        {{ if $field.JSONFields }}
+            {{ range $field.JSONFields }}
+                {{ .FieldName }} {{ .FieldType }} `json:"{{ .NameUnderscore }}"`
+            {{- end }}
+        {{ else }}
+                AField string `json:"a_field"`
+                BField string `json:"b_field"`
+        {{ end }}
+    }
+
+    func (d *{{ $field.FieldType }}) Scan(src interface{}) error  { return dbScan(d, src) }
+    func (d {{ $field.FieldType }}) Value() (driver.Value, error) { return dbValue(d) }
+
+    {{ end }}
+    {{ if eq $field.TagValue "enum" }}
+    type {{ $field.FieldType }} {{ $field.TagValue2 }}
+
+    const (
+        {{ range $key, $enum := $field.Enums }}
+            {{ if eq $field.TagValue2 "int" }}
+            {{ $field.FieldType }}{{ $enum.FieldName }}   = {{ $field.FieldType }}({{ $key }})
+            {{ else }}
+            {{ $field.FieldType }}{{ $enum.FieldName }}   = {{ $field.FieldType }}("{{ $enum.NameDash }}")
+            {{ end }}
+        {{- end }}
+    )
+    {{ end }}
+{{ end }}
+

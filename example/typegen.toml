@@ -2,13 +2,20 @@
 
 
 # web handlers dir
-web-handlers = "handlers"
+handler = "handlers.go"
 
 # sqlstore dir
-sqlstore = "sqlstore"
+sql = "sqlstore.go"
 
 # go types dir
-types = "ty"
+type = "ty.go"
+
+# migrations dir
+migration = "migrations.sql"
+
+
+# ui dir
+ui = "ui.ts"
 
 # base dir
 base-dir = "example"

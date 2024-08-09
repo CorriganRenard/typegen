@@ -1,3 +1,4 @@
+{{ $won := . }}
 package sqlstore
 
 import (
@@ -10,63 +11,63 @@ import (
 	"strings"
 )
 
-// {{.StructName}}Store has db storage methods for this type.
-type {{.StructName}}Store struct {
+// {{$won.StructName}}Store has db storage methods for this type.
+type {{$won.StructName}}Store struct {
 	*SQLStore // embed store for easy access
 }
 
-// {{.StructName}} returns a {{.StructName}}Store for accessing this type.
-func (s *SQLStore) {{.StructName}}() *{{.StructName}}Store {
-	return &{{.StructName}}Store{SQLStore: s}
+// {{$won.StructName}} returns a {{$won.StructName}}Store for accessing this type.
+func (s *SQLStore) {{$won.StructName}}() *{{$won.StructName}}Store {
+	return &{{$won.StructName}}Store{SQLStore: s}
 }
 
 // tableName returns the name of the table.
-func (s *{{.StructName}}Store) tableName() string {
-	return "{{.NameUnderscore}}"
+func (s *{{$won.StructName}}Store) tableName() string {
+	return "{{$won.NameUnderscore}}"
 }
 
 // joinTableName returns the name of the join table.
-func (s *{{.StructName}}Store) joinTableName() string {
+func (s *{{$won.StructName}}Store) joinTableName() string {
 	return "join_table_name"
 }
 
 
 // tableStruct returns a variable of table type.
-func (s *{{.StructName}}Store) tableType() ty.{{.StructName}} {
-	return ty.{{.StructName}}{}
+func (s *{{$won.StructName}}Store) tableType() ty.{{$won.StructName}} {
+	return ty.{{$won.StructName}}{}
 }
 
 // tableFields returns the list of fields tagged with db
-func (s *{{.StructName}}Store) tableFields() []string {
-	return tfields(ty.{{.StructName}}{})
+func (s *{{$won.StructName}}Store) tableFields() []string {
+	return tfields(ty.{{$won.StructName}}{})
 }
 
-// {{.StructName}}List is a slice of Project with relevant methods.
-type {{.StructName}}List []ty.{{.StructName}}
+// {{$won.StructName}}List is a slice of Project with relevant methods.
+type {{$won.StructName}}List []ty.{{$won.StructName}}
 
-// {{.StructName}}Result implements {{.StructName}}Resulter by adding
+// {{$won.StructName}}Result implements {{$won.StructName}}Resulter by adding
 // to the slice.
-func (l *{{.StructName}}List) {{.StructName}}Result(o ty.{{.StructName}}) error {
+func (l *{{$won.StructName}}List) {{$won.StructName}}Result(o ty.{{$won.StructName}}) error {
 	*l = append(*l, o)
 	return nil
 }
 
-// {{.StructName}}Resulter can receive Project instances as they
+// {{$won.StructName}}Resulter can receive {{$won.StructName}} instances as they
 // are streamed from the underlying data source.
-type {{.StructName}}Resulter interface {
-	{{.StructName}}Result(ty.{{.StructName}}) error
+type {{$won.StructName}}Resulter interface {
+	{{$won.StructName}}Result(ty.{{$won.StructName}}) error
 }
 
-// {{.StructName}}ResulterFunc allows implementation of {{.StructName}}Resulter as a function.
-type {{.StructName}}ResulterFunc func(o ty.{{.StructName}}) error
+// {{$won.StructName}}ResulterFunc allows implementation of {{$won.StructName}}Resulter as a function.
+type {{$won.StructName}}ResulterFunc func(o ty.{{$won.StructName}}) error
 
-// {{.StructName}}ResulterFunc implements {{.StructName}}Resulter by calling f.
-func (f {{.StructName}}ResulterFunc) {{.StructName}}Result(o ty.{{.StructName}}) error {
+// {{$won.StructName}}ResulterFunc implements {{$won.StructName}}Resulter by calling f.
+func (f {{$won.StructName}}ResulterFunc) {{$won.StructName}}Result(o ty.{{$won.StructName}}) error {
 	return f(o)
 }
 
 // Insert will insert a record.
-func (s *{{.StructName}}Store) Insert(ctx context.Context, o *ty.{{.StructName}}) error {
+func (s *{{$won.StructName}}Store) Insert(ctx context.Context, o *ty.{{$won.StructName}}) error {
 
 	idAssign(o)
 	createTimeTouch(o)
@@ -92,7 +93,7 @@ func (s *{{.StructName}}Store) Insert(ctx context.Context, o *ty.{{.StructName}}
 }
 
 // Delete removes a the indicated record.
-func (s *{{.StructName}}Store) Delete(ctx context.Context, v{{.PrimaryKeyField.FieldName}} string) error {
+func (s *{{$won.StructName}}Store) Delete(ctx context.Context, v{{.PrimaryKeyField.FieldName}} string) error {
 
 	tx, err := s.SQLStore.Session().BeginTx(ctx, nil)
 	if err != nil {
@@ -111,7 +112,7 @@ func (s *{{.StructName}}Store) Delete(ctx context.Context, v{{.PrimaryKeyField.F
 }
 
 // Update overwrites an existing record.
-func (s *{{.StructName}}Store) Update(ctx context.Context, o *ty.{{.StructName}}) error {
+func (s *{{$won.StructName}}Store) Update(ctx context.Context, o *ty.{{$won.StructName}}) error {
 
 	tx, err := s.SQLStore.Session().BeginTx(ctx, nil)
 	if err != nil {
@@ -135,7 +136,7 @@ func (s *{{.StructName}}Store) Update(ctx context.Context, o *ty.{{.StructName}}
 }
 
 // SelectByID returns the matching record by primary key.
-func (s *{{.StructName}}Store) SelectByID(ctx context.Context, v{{.PrimaryKeyField.FieldName}} string) (*ty.{{.StructName}}, error) {
+func (s *{{$won.StructName}}Store) SelectByID(ctx context.Context, v{{.PrimaryKeyField.FieldName}} string) (*ty.{{$won.StructName}}, error) {
 	tx, err := s.SQLStore.Session().BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -153,20 +154,20 @@ func (s *{{.StructName}}Store) SelectByID(ctx context.Context, v{{.PrimaryKeyFie
 
 	return &ret, tx.Commit()
 }
-
-{{ if ne .ForeignKeyField.FieldName ""}}
-// SelectBy{{.ForeignKeyField.FieldName}} returns the matching record by id.
-func (s *{{.StructName}}Store) SelectByID(ctx context.Context, v{{.ForeignKeyField.FieldName}} string) (*ty.{{.StructName}}, error) {
+{{ range $fk := $won.ForeignKeyField }}
+{{ if ne $fk.FieldName ""}}
+// SelectBy{{$fk.FieldName}} returns the matching record by {{$fk.FieldName}}.
+func (s *{{$won.StructName}}Store) SelectBy{{$fk.FieldName}}(ctx context.Context, v{{$fk.FieldName}} string) (*ty.{{$won.StructName}}, error) {
 	tx, err := s.SQLStore.Session().BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
-	}
+	}{
 	defer tx.RollbackUnlessCommitted()
 
 	ret := s.tableType()
 	err = tx.Select(s.tableFields()...).
 		From(s.tableName()).
-		Where("{{.ForeignKeyField.NameUnderscore}}= ?", v{{.ForeignKeyField.FieldName}}).
+		Where("{{$fk.NameUnderscore}}= ?", v{{$fk.FieldName}}).
 		LoadOne(&ret)
 	if err != nil {
 		return nil, err
@@ -175,11 +176,12 @@ func (s *{{.StructName}}Store) SelectByID(ctx context.Context, v{{.ForeignKeyFie
 	return &ret, tx.Commit()
 }
 {{ end }}
+{{ end }}
 
 
 {{ if ne "" ""}}
 // SelectByUserIDAndNameLike joins projects and users and returns where the project name LIKE pjtNameLike.
-func (s *{{.StructName}}Store) SelectByUserIDAndNameLike(ctx context.Context, offset, limit int64, userID string, pjtNameLike string, result {{.StructName}}Resulter) error {
+func (s *{{$won.StructName}}Store) SelectByUserIDAndNameLike(ctx context.Context, offset, limit int64, userID string, pjtNameLike string, result {{$won.StructName}}Resulter) error {
 
 	if result == nil {
 		return errors.New("result must not be nil")
@@ -193,7 +195,7 @@ func (s *{{.StructName}}Store) SelectByUserIDAndNameLike(ctx context.Context, of
 		defer tx.Rollback()
 	}
 
-	var v ty.{{.StructName}}
+	var v ty.{{$won.StructName}}
 
 	whereArgs := []interface{}{
 		userID,
@@ -222,12 +224,12 @@ func (s *{{.StructName}}Store) SelectByUserIDAndNameLike(ctx context.Context, of
 	defer rows.Close()
 
 	for rows.Next() {
-		v = ty.{{.StructName}}{}
+		v = ty.{{$won.StructName}}{}
 		err := rows.StructScan(&v)
 		if err != nil {
 			return err
 		}
-		err = result.{{.StructName}}Result(v)
+		err = result.{{$won.StructName}}Result(v)
 		if err != nil {
 			return err
 		}
@@ -240,7 +242,7 @@ func (s *{{.StructName}}Store) SelectByUserIDAndNameLike(ctx context.Context, of
 
 
 // SelectAllBy{{.ForeignKeyField.FieldName}} selects all records from {{.NameUnderscore}} via join table and {{.PrimaryKeyField.NameUnderscore}}
-func (s *{{.StructName}}Store) SelectAllBy{{.ForeignKeyField.FieldName}} (ctx context.Context, {{.ForeignKeyField.NameCamel}}  string, result {{.StructName}}Resulter) error {
+func (s *{{$won.StructName}}Store) SelectAllBy{{.ForeignKeyField.FieldName}} (ctx context.Context, {{.ForeignKeyField.NameCamel}}  string, result {{$won.StructName}}Resulter) error {
 
 	if result == nil {
 		return errors.New("result must not be nil")
@@ -254,25 +256,25 @@ func (s *{{.StructName}}Store) SelectAllBy{{.ForeignKeyField.FieldName}} (ctx co
 		defer tx.Rollback()
 	}
 
-	var v ty.{{.StructName}}
+	var v ty.{{$won.StructName}}
 
 	q := fmt.Sprintf(`SELECT %s FROM %s WHERE {{.PrimaryKeyField.NameUnderscore}}  IN (SELECT  {{.PrimaryKeyField.NameUnderscore}} FROM %s WHERE  {{.ForeignKeyField.NameUnderscore}} = ?)`,
 		strings.Join(dbFieldQuote(s.tableFields()), ","), s.tableName(), s.joinTablename(), 
 	)
 
-	rows, err := tx.QueryContext(ctx, q, {{.ForeignKeyField.NameCamel}})
+	rows, err := tx.QueryxContext(ctx, q, {{.ForeignKeyField.NameCamel}})
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		v = ty.{{.StructName}}{}
-		err := rows.Scan(&v)
+		v = ty.{{$won.StructName}}{}
+		err := rows.ScanStruct(&v)
 		if err != nil {
 			return err
 		}
-		err = result.{{.StructName}}Result(v)
+		err = result.{{$won.StructName}}Result(v)
 		if err != nil {
 			return err
 		}
@@ -291,7 +293,7 @@ func (s *{{.StructName}}Store) SelectAllBy{{.ForeignKeyField.FieldName}} (ctx co
 // Records are struct scanned and then passed into the appropriate method on result.
 // Note that for more complex query needs it is recommended you add a custom select function
 // instead of trying to adapt this one to every use case.
-func (s *{{.StructName}}Store) Select(ctx context.Context, offset, limit int64, critiera map[string]interface{}, orderBy []interface{}, result {{.StructName}}Resulter) error {
+func (s *{{$won.StructName}}Store) Select(ctx context.Context, offset, limit int64, critiera map[string]interface{}, orderBy []interface{}, result {{$won.StructName}}Resulter) error {
 
 	if result == nil {
 		return errors.New("result must not be nil")
@@ -305,7 +307,7 @@ func (s *{{.StructName}}Store) Select(ctx context.Context, offset, limit int64, 
 		defer tx.Rollback()
 	}
 
-	var v ty.{{.StructName}}
+	var v ty.{{$won.StructName}}
 
 	whereSQL, whereArgs, err := sqlFilter(critiera, &v)
 	if err != nil {
@@ -339,19 +341,19 @@ func (s *{{.StructName}}Store) Select(ctx context.Context, offset, limit int64, 
 		}
 	}
 
-	rows, err := tx.QueryContext(ctx, sqlb.String(), whereArgs...)
+	rows, err := tx.QueryxContext(ctx, sqlb.String(), whereArgs...)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		v = ty.{{.StructName}}{}
-		err := rows.Scan(&v)
+		v = ty.{{$won.StructName}}{}
+		err := rows.StructScan(&v)
 		if err != nil {
 			return err
 		}
-		err = result.{{.StructName}}Result(v)
+		err = result.{{$won.StructName}}Result(v)
 		if err != nil {
 			return err
 		}
@@ -372,7 +374,7 @@ func (s *{{.StructName}}Store) Select(ctx context.Context, offset, limit int64, 
 // Records are struct scanned and then passed into the appropriate method on result.
 // Note that for more complex query needs it is recommended you add a custom select function
 // instead of trying to adapt this one to every use case.
-func (s *{{.StructName}}Store) SelectCursor(ctx context.Context, limit int64, cursor string, criteria map[string]interface{}, orderBy []interface{}, result {{.StructName}}Resulter) (nextCursor string, err error) {
+func (s *{{$won.StructName}}Store) SelectCursor(ctx context.Context, limit int64, cursor string, criteria map[string]interface{}, orderBy []interface{}, result {{$won.StructName}}Resulter) (nextCursor string, err error) {
 
 	if cursor != "" {
 		cursorj, err := base64.RawURLEncoding.DecodeString(cursor)
@@ -405,7 +407,7 @@ func (s *{{.StructName}}Store) SelectCursor(ctx context.Context, limit int64, cu
 
 	rcount := 0
 	cout := make(map[string]interface{}, len(orderBy))
-	r2 := {{.StructName}}ResulterFunc(func(o ty.{{.StructName}}) error {
+	r2 := {{$won.StructName}}ResulterFunc(func(o ty.{{$won.StructName}}) error {
 		rcount++
 		for _, ov := range orderBy {
 			switch ov2 := ov.(type) {
@@ -419,7 +421,7 @@ func (s *{{.StructName}}Store) SelectCursor(ctx context.Context, limit int64, cu
 				return fmt.Errorf("unknown type in orderBy entry %T", ov)
 			}
 		}
-		return result.{{.StructName}}Result(o)
+		return result.{{$won.StructName}}Result(o)
 	})
 	//log.Printf("criteria: %#v", criteria)
 	//log.Printf("orderBy: %#v", orderBy)
@@ -441,7 +443,7 @@ func (s *{{.StructName}}Store) SelectCursor(ctx context.Context, limit int64, cu
 }
 
 // Count returns the count of the result of the indicated query.
-func (s *{{.StructName}}Store) Count(ctx context.Context, critiera map[string]interface{}, orderBy []interface{}) (int64, error) {
+func (s *{{$won.StructName}}Store) Count(ctx context.Context, critiera map[string]interface{}, orderBy []interface{}) (int64, error) {
 
 	ctx, tx, txCreated, err := s.ctxTxx(ctx)
 	if err != nil {
@@ -451,7 +453,7 @@ func (s *{{.StructName}}Store) Count(ctx context.Context, critiera map[string]in
 		defer tx.Rollback()
 	}
 
-	var v ty.{{.StructName}}
+	var v ty.{{$won.StructName}}
 
 	whereSQL, whereArgs, err := sqlFilter(critiera, &v)
 	if err != nil {

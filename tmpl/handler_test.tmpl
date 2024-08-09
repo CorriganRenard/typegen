@@ -1,0 +1,124 @@
+{{ $won := . }}
+
+
+
+package handlers
+
+import (
+	"bootstraphost/id"
+	"bootstraphost/security"
+	"bootstraphost/ty"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func Test{{ $won.StructName }}Handler(t *testing.T) {
+
+	assert := assert.New(t)
+
+	pid := id.Next()
+	username := "test@example.com"
+	rctx := context.Background()
+	store := newTestStore(t)
+	auth := security.NewAuthenticator(store)
+	rcookie := initTestData(t, store, username, pid, auth)
+
+	h := New{{ $won.StructName }}Handler(store, auth)
+
+	t.Run("should return 403 if entity is not accessible", func(t *testing.T) {
+		w := httptest.NewRecorder()
+
+		r, _ := http.NewRequestWithContext(rctx, "GET", fmt.Sprintf("/api/{{ $won.NameDash }}/{{ $won.NameFirstChar}}/%s", "hello"), &bytes.Buffer{})
+		r.AddCookie(rcookie)
+		h.ServeHTTP(w, r)
+		res := w.Result()
+
+		assert.Equal(403, res.StatusCode)
+
+	})
+
+	t.Run("should return 201 if the record is created successfully", func(t *testing.T) {
+
+		new{{ $won.StructName }} := ty.{{ $won.StructName }}{ProjectID: pid, {{ $won.PrimaryKeyField }}: pid}
+		new{{ $won.StructName }}Bytes, _ := json.Marshal(&new{{ $won.StructName }})
+
+		w := httptest.NewRecorder()
+
+		r, _ := http.NewRequestWithContext(rctx, "POST", "/api/{{ $won.NameDash }}", bytes.NewBuffer(new{{ $won.StructName }}Bytes))
+		r.AddCookie(rcookie)
+		h.ServeHTTP(w, r)
+		res := w.Result()
+
+		assert.Equal(201, res.StatusCode)
+		body, err := io.ReadAll(res.Body)
+		assert.NoError(err)
+
+		assert.Contains(string(body), pid)
+
+	})
+
+	t.Run("should return 200 if the record is found", func(t *testing.T) {
+		w := httptest.NewRecorder()
+
+		r, _ := http.NewRequestWithContext(rctx, "GET",  fmt.Sprintf("/api/{{ $won.NameDash }}/{{ $won.NameFirstChar}}/%s", pid), &bytes.Buffer{})
+		r.AddCookie(rcookie)
+		h.ServeHTTP(w, r)
+		res := w.Result()
+
+		assert.Equal(200, res.StatusCode)
+		body, err := io.ReadAll(res.Body)
+		assert.NoError(err)
+
+		assert.Contains(string(body), pid)
+
+	})
+
+	t.Run("should return 200 if the record is updated successfully", func(t *testing.T) {
+
+		new{{ $won.StructName }} := ty.{{ $won.StructName }}{ProjectID: pid, {{ $won.PrimaryKeyField }}: pid}
+		new{{ $won.StructName }}Bytes, _ := json.Marshal(&new{{ $won.StructName }})
+
+
+		w := httptest.NewRecorder()
+
+		r, _ := http.NewRequestWithContext(rctx, "PATCH", "/api/{{ $won.NameDash }}", bytes.NewBuffer(new{{ $won.StructName }}Bytes))
+		r.AddCookie(rcookie)
+		h.ServeHTTP(w, r)
+		res := w.Result()
+
+		assert.Equal(200, res.StatusCode)
+		body, err := io.ReadAll(res.Body)
+		assert.NoError(err)
+
+		assert.Contains(string(body), pid)
+
+	})
+
+	t.Run("should return 200 if the record is deleted", func(t *testing.T) {
+
+		w := httptest.NewRecorder()
+
+		r, _ := http.NewRequestWithContext(rctx, "DELETE",  fmt.Sprintf("/api/{{ $won.NameDash }}/{{ $won.NameFirstChar}}/%s", pid), &bytes.Buffer{})
+		r.AddCookie(rcookie)
+		h.ServeHTTP(w, r)
+		res := w.Result()
+
+		assert.Equal(200, res.StatusCode)
+
+	})
+
+    // TODO: READ LIST BY FOREIGN KEY
+    // TODO: TRY TO HIT ADMIN ENDPOINT
+
+
+}
+
+
