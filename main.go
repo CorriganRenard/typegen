@@ -37,7 +37,7 @@ func main() {
 	viper.SetConfigName("typegen")
 
 	configDirFile, _ := filepath.Abs(*configDirF)
-	log.Printf("configDirF: %v configDirFile: %v", configDirF, configDirFile)
+	log.Printf("configDirF: %v configDirFile: %v", *configDirF, configDirFile)
 
 	viper.AddConfigPath(configDirFile)
 	viper.SetConfigType("toml")
